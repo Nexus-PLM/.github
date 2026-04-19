@@ -23,17 +23,36 @@ jobs:
           const merged   = context.payload.pull_request.merged;
           const optionId = merged ? doneOption : cancelOption;
 
-          const { node } = await github.graphql(, { nodeId: prNodeId });
+          const { node } = await github.graphql(
+            `query($nodeId: ID!) {
+              node(id: $nodeId) {
+                ... on PullRequest {
+                  projectItems(first: 10) {
+                    nodes { id project { id } }
+                  }
+                }
+              }
+            }`,
+            { nodeId: prNodeId }
+          );
 
           const items = (node?.projectItems?.nodes || [])
             .filter(item => item.project.id === projectId);
 
           if (items.length === 0) {
-            core.info('PR not tracked in Nexus Issue Tracker — skipping.');
+            core.info('PR not tracked in Nexus Issue Tracker -- skipping.');
             return;
           }
 
           for (const item of items) {
-            await github.graphql(, { projectId, itemId: item.id, fieldId: statusField, optionId });
+            await github.graphql(
+              `mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+                updateProjectV2ItemFieldValue(input: {
+                  projectId: $projectId, itemId: $itemId, fieldId: $fieldId,
+                  value: { singleSelectOptionId: $optionId }
+                }) { projectV2Item { id } }
+              }`,
+              { projectId, itemId: item.id, fieldId: statusField, optionId }
+            );
             core.info('Marked as ' + (merged ? 'Done' : 'Cancelled'));
           }
