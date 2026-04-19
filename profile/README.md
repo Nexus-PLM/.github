@@ -74,8 +74,12 @@ git push origin feature/<n>-<slug>
 Open a PR from your `feature/*` branch targeting **`next`** (not `main`).
 
 When the PR is opened:
-- It is automatically added as a card on the [Nexus Issue Tracker](https://github.com/orgs/Nexus-PLM/projects/1) project board
+- The title is automatically prefixed: `PR to next: <your title>`
+- It is automatically added to the [Nexus Issue Tracker](https://github.com/orgs/Nexus-PLM/projects/1) project board
 - CI runs against the `next` branch trigger
+
+When the PR is merged, its project board item status is automatically set to **Done**.
+If the PR is closed without merging, the status is set to **Cancelled**.
 
 If your PR description contains `Closes #<n>` or `Fixes #<n>`, the linked issue will be automatically closed when the PR merges.
 
@@ -87,15 +91,17 @@ Once your `feature/*` PR is approved and merged into `next`, your changes are in
 
 ### 6. Promotion to main (automatic)
 
-Merging anything into `next` automatically triggers a pull request from `next` to `main`. You do not open this PR — it appears on its own within seconds.
+Merging anything into `next` automatically triggers a pull request from `next` to `main`. You do not open this PR — it appears on its own within seconds, titled `PR to main: next -> main`.
 
 ```
-Your PR merges to next  →  "next -> main" PR opens automatically
+Your PR merges to next  →  "PR to main: next -> main" opens automatically
 ```
 
 The `next→main` PR is a living PR: if more feature branches merge to `next` before the PR is reviewed, it accumulates all changes. There is always at most one open `next→main` PR per repository.
 
 **The `next→main` PR must be reviewed and merged manually.** It is never merged automatically.
+
+When the `next→main` PR is merged, its project board item is automatically set to **Done**.
 
 ---
 
@@ -105,8 +111,10 @@ The `next→main` PR is a living PR: if more feature branches merge to `next` be
 |---------|-------------|
 | You create a `feature/*`, `fix/*`, `hotfix/*`, `chore/*`, `bugfix/*`, or `bug/*` branch from `main` | Branch is deleted automatically; you receive a comment with instructions |
 | You open a PR to `main` from any branch other than `next` | PR is closed automatically; you receive a comment with instructions |
-| Any PR is opened on any repo | PR is added to the [Nexus Issue Tracker](https://github.com/orgs/Nexus-PLM/projects/1) project board |
-| A commit lands on `next` (e.g., PR merge) | A `next→main` PR is opened automatically if one is not already open |
+| Any PR is opened on any repo | Title is prefixed `PR to <base>: <title>`; PR is added to the [Nexus Issue Tracker](https://github.com/orgs/Nexus-PLM/projects/1) project board |
+| A commit lands on `next` (e.g., PR merge) | A `PR to main: next -> main` PR is opened automatically if one is not already open |
+| A PR is merged | Project board item status is set to **Done** |
+| A PR is closed without merging | Project board item status is set to **Cancelled** |
 
 ---
 
@@ -143,7 +151,18 @@ All open issues and pull requests across every Nexus-PLM repository are tracked 
 
 **[Nexus Issue Tracker → https://github.com/orgs/Nexus-PLM/projects/1](https://github.com/orgs/Nexus-PLM/projects/1)**
 
-PRs are added automatically. Issues should be added manually when work is planned.
+### PR lifecycle in the board
+
+| Event | Title in board | Status |
+|-------|---------------|--------|
+| PR opened (feature → next) | `PR to next: <your title>` | Backlog (default) |
+| PR opened (next → main, auto) | `PR to main: next -> main` | Backlog (default) |
+| PR merged | — | **Done** |
+| PR closed without merging | — | **Cancelled** |
+
+All status changes are automatic — you do not need to update the board manually.
+
+Issues should be added to the board manually when work is planned. PRs are added automatically on open.
 
 ---
 
