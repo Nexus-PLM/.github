@@ -6,6 +6,7 @@ on:
 
 permissions:
   pull-requests: write
+  issues: write
 
 jobs:
   add-to-project:
@@ -16,9 +17,11 @@ jobs:
         github-token: ${{ secrets.NEXUS_PLM_PROJECT_TOKEN }}
         script: |
           const projectId = 'PVT_kwDOD-RDF84BUbus';
-          const pr = context.payload.pull_request;
-          const base = pr.base.ref;
+          const pr     = context.payload.pull_request;
+          const base   = pr.base.ref;
+          const author = pr.user.login;
           const prefix = `PR to ${base}: `;
+
           if (!pr.title.startsWith('PR to ')) {
             await github.rest.pulls.update({
               owner: context.repo.owner,
@@ -27,14 +30,37 @@ jobs:
               title: prefix + pr.title
             });
           }
+
+          // Assign to PR author for feature->next PRs.
+          // Auto next->main PRs (head === 'next') are assigned inside auto-pr-next-to-main.yml.
+          if (author !== 'github-actions[bot]' && pr.head.ref !== 'next') {
+            try {
+              await github.rest.issues.checkUserCanBeAssigned({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                assignee: author
+              });
+              await github.rest.issues.addAssignees({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                assignees: [author]
+              });
+              core.info(`Assigned to ${author}`);
+            } catch(e) {
+              core.info(`${author} cannot be assigned to this repo: ${e.message}`);
+            }
+          }
+
           try {
-            await github.graphql(`
-              mutation($projectId: ID!, $contentId: ID!) {
+            await github.graphql(
+              `mutation($projectId: ID!, $contentId: ID!) {
                 addProjectV2ItemById(input: {projectId: $projectId, contentId: $contentId}) {
                   item { id }
                 }
-              }
-            `, { projectId, contentId: pr.node_id });
+              }`,
+              { projectId, contentId: pr.node_id }
+            );
           } catch(e) {
             core.warning('Could not add PR to project: ' + e.message);
           }
