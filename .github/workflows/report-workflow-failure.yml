@@ -1,0 +1,75 @@
+name: Report workflow failure to project board
+
+on:
+  workflow_run:
+    workflows: ["*"]
+    types: [completed]
+
+permissions: {}
+
+jobs:
+  report:
+    if: github.event.workflow_run.conclusion == 'failure'
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/github-script@v7
+      with:
+        github-token: ${{ secrets.NEXUS_PLM_PROJECT_TOKEN }}
+        script: |
+          const projectId     = 'PVT_kwDOD-RDF84BUbus';
+          const statusField   = 'PVTSSF_lADOD-RDF84BUbuszhBj2nw';
+          const failedActions = 'fd4dcc66';
+
+          const run = context.payload.workflow_run;
+
+          // Avoid infinite loop
+          if (run.name === 'Report workflow failure to project board') return;
+
+          const sha    = run.head_sha.substring(0, 7);
+          const branch = run.head_branch;
+          const title  = `Action failed: ${run.name} on ${branch} (${sha})`;
+          const body   = [
+            `Workflow **${run.name}** failed on branch \`${branch}\`.`,
+            ``,
+            `**Commit:** \`${sha}\` â€” ${run.head_commit?.message?.split('\n')[0] || ''}`,
+            `**Run:** [View logs](${run.html_url})`
+          ].join('\n');
+
+          const { data: issue } = await github.rest.issues.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title,
+            body
+          });
+
+          // Add to project board
+          let itemId;
+          try {
+            const result = await github.graphql(
+              `mutation($projectId: ID!, $contentId: ID!) {
+                addProjectV2ItemById(input: {projectId: $projectId, contentId: $contentId}) {
+                  item { id }
+                }
+              }`,
+              { projectId, contentId: issue.node_id }
+            );
+            itemId = result.addProjectV2ItemById.item.id;
+          } catch(e) {
+            core.warning('Could not add issue to project: ' + e.message);
+            return;
+          }
+
+          // Place in Failed Actions column
+          try {
+            await github.graphql(
+              `mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+                updateProjectV2ItemFieldValue(input: {
+                  projectId: $projectId, itemId: $itemId, fieldId: $fieldId,
+                  value: { singleSelectOptionId: $optionId }
+                }) { projectV2Item { id } }
+              }`,
+              { projectId, itemId, fieldId: statusField, optionId: failedActions }
+            );
+          } catch(e) {
+            core.warning('Could not set Failed Actions column: ' + e.message);
+          }
