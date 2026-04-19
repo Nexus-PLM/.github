@@ -36,20 +36,36 @@ jobs:
 
           const sha    = run.head_sha.substring(0, 7);
           const branch = run.head_branch;
-          const title  = `Action failed: ${run.name} on ${branch} (${sha})`;
+          const prefix = `Action failed: ${run.name} on ${branch}`;
+          const title  = `${prefix} (${sha})`;
 
-          // Deduplicate: skip if an open issue with this title already exists
+          // Deduplicate: if an open issue exists for this workflow+branch, comment instead
+          const sevenDaysAgo = new Date();
+          sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
           const { data: existing } = await github.rest.issues.listForRepo({
             owner: context.repo.owner,
             repo: context.repo.repo,
             state: 'open',
             per_page: 50
           });
-          if (existing.some(i => i.title === title)) {
-            core.info('Duplicate: issue already exists for this failure -- skipping.');
+          const dupe = existing.find(i =>
+            i.title.startsWith(prefix) && new Date(i.created_at) > sevenDaysAgo
+          );
+
+          if (dupe) {
+            // Add a comment to the existing issue
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: dupe.number,
+              body: `Still failing on \`${branch}\` â€” commit \`${sha}\`: ${run.head_commit?.message?.split('\n')[0] || ''}\n[View logs](${run.html_url})`
+            });
+            core.info(`Commented on existing issue #${dupe.number}`);
             return;
           }
 
+          // Create new issue
           const body = [
             `Workflow **${run.name}** failed on branch \`${branch}\`.`,
             ``,
