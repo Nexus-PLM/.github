@@ -22,16 +22,38 @@ jobs:
 
           const run = context.payload.workflow_run;
 
-          // Avoid infinite loop
-          if (run.name === 'Report workflow failure to project board') return;
+          // Skip enforcement/policy workflows -- their failures are intentional
+          const skipNames = [
+            'Report workflow failure to project board',
+            'Enforce PRs to main must come from next',
+            'Enforce working branches must be created from next',
+            'Add PR to project',
+            'Auto PR next -> main',
+            'Mark project item Done or Cancelled when PR closes',
+          ];
+          if (skipNames.includes(run.name)) return;
+          if (run.path && run.path.includes('enforce')) return;
 
           const sha    = run.head_sha.substring(0, 7);
           const branch = run.head_branch;
           const title  = `Action failed: ${run.name} on ${branch} (${sha})`;
-          const body   = [
+
+          // Deduplicate: skip if an open issue with this title already exists
+          const { data: existing } = await github.rest.issues.listForRepo({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            state: 'open',
+            per_page: 50
+          });
+          if (existing.some(i => i.title === title)) {
+            core.info('Duplicate: issue already exists for this failure -- skipping.');
+            return;
+          }
+
+          const body = [
             `Workflow **${run.name}** failed on branch \`${branch}\`.`,
             ``,
-            `**Commit:** \`${sha}\` â€” ${run.head_commit?.message?.split('\n')[0] || ''}`,
+            `**Commit:** \`${sha}\` -- ${run.head_commit?.message?.split('\n')[0] || ''}`,
             `**Run:** [View logs](${run.html_url})`
           ].join('\n');
 
