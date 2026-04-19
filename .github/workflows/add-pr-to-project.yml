@@ -16,7 +16,11 @@ jobs:
       with:
         github-token: ${{ secrets.NEXUS_PLM_PROJECT_TOKEN }}
         script: |
-          const projectId = 'PVT_kwDOD-RDF84BUbus';
+          const projectId   = 'PVT_kwDOD-RDF84BUbus';
+          const statusField = 'PVTSSF_lADOD-RDF84BUbuszhBj2nw';
+          const prToNext    = '531fa42a';
+          const prToMain    = 'fc7de0a5';
+
           const pr     = context.payload.pull_request;
           const base   = pr.base.ref;
           const author = pr.user.login;
@@ -31,8 +35,7 @@ jobs:
             });
           }
 
-          // Assign to PR author for feature->next PRs.
-          // Auto next->main PRs (head === 'next') are assigned inside auto-pr-next-to-main.yml.
+          // Assign to PR author (skip for auto next->main PRs)
           if (author !== 'github-actions[bot]' && pr.head.ref !== 'next') {
             try {
               await github.rest.issues.checkUserCanBeAssigned({
@@ -46,14 +49,15 @@ jobs:
                 issue_number: pr.number,
                 assignees: [author]
               });
-              core.info(`Assigned to ${author}`);
             } catch(e) {
-              core.info(`${author} cannot be assigned to this repo: ${e.message}`);
+              core.info(`${author} cannot be assigned: ${e.message}`);
             }
           }
 
+          // Add to project board
+          let itemId;
           try {
-            await github.graphql(
+            const result = await github.graphql(
               `mutation($projectId: ID!, $contentId: ID!) {
                 addProjectV2ItemById(input: {projectId: $projectId, contentId: $contentId}) {
                   item { id }
@@ -61,6 +65,25 @@ jobs:
               }`,
               { projectId, contentId: pr.node_id }
             );
+            itemId = result.addProjectV2ItemById.item.id;
           } catch(e) {
             core.warning('Could not add PR to project: ' + e.message);
+            return;
+          }
+
+          // Place in the correct column
+          const optionId = base === 'next' ? prToNext : (base === 'main' ? prToMain : null);
+          if (!optionId) return;
+          try {
+            await github.graphql(
+              `mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+                updateProjectV2ItemFieldValue(input: {
+                  projectId: $projectId, itemId: $itemId, fieldId: $fieldId,
+                  value: { singleSelectOptionId: $optionId }
+                }) { projectV2Item { id } }
+              }`,
+              { projectId, itemId, fieldId: statusField, optionId }
+            );
+          } catch(e) {
+            core.warning('Could not set project column: ' + e.message);
           }
