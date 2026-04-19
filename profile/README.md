@@ -163,6 +163,25 @@ gh api repos/Nexus-PLM/<repo>/branches/<branch>/protection/enforce_admins -X POS
 
 Re-enable protection as soon as the change is made. Do not leave it disabled.
 
+**Important — keep `next` in sync after any direct commit to `main`:**
+
+If you commit directly to `main` (e.g., updating a workflow file), immediately merge `main` into `next` to prevent branch divergence:
+
+```bash
+# Temporarily bypass next protection
+gh api repos/Nexus-PLM/<repo>/branches/next/protection/enforce_admins -X DELETE
+
+# Merge main into next
+gh api repos/Nexus-PLM/<repo>/merges -X POST \
+  -f base=next -f head=main \
+  -f commit_message="chore: sync main into next"
+
+# Re-enable next protection
+gh api repos/Nexus-PLM/<repo>/branches/next/protection/enforce_admins -X POST -f enabled=true
+```
+
+Never commit the same content independently to both `main` and `next` — this creates diverged histories that are difficult to reconcile. Always commit to one branch and propagate via merge.
+
 ---
 
 ## Quick Reference
